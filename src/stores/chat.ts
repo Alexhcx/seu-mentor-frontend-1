@@ -1,4 +1,4 @@
-// src/stores/chat.js
+// src/stores/chat.ts
 import { defineStore } from "pinia";
 import MentorChatClient from "@/services/chatClient";
 import {
@@ -8,8 +8,77 @@ import {
 import { getChatHistoryByTutoringId } from "@/services/chatHistoryService";
 import { showSnackbar } from "@/components/AppSnackbar.vue";
 
+interface Mentoria {
+  id: string | number;
+  disciplineName: string;
+  isChatEnable: boolean;
+  participants?: Array<{
+    userAvatar?: string;
+    userName?: string;
+  }>;
+  mentorName?: string;
+  mentorAvatar?: string;
+  tutoringDate?: string;
+}
+
+interface Chat {
+  id: string;
+  originalId: string | number;
+  role: 'mentor' | 'mentorado';
+  title: string;
+  subtitle: string;
+  avatar: string;
+  otherUserName: string;
+  lastMessage: string;
+  lastMessageTime: string | null;
+  unreadCount: number;
+  tutoringDate?: string;
+}
+
+interface Message {
+  id: string;
+  message: string;
+  senderId: string | number;
+  senderName: string;
+  timestamp: string;
+  tutoringId: string | number;
+  status: 'sending' | 'sent' | 'received' | 'read' | 'failed';
+  isTemp?: boolean;
+}
+
+interface Notification {
+  id: string;
+  chatId: string;
+  title: string;
+  message: string;
+  avatar: string;
+  senderName: string;
+}
+
+interface ChatState {
+  chatClient: MentorChatClient | null;
+  isConnected: boolean;
+  mentoriasMentor: Mentoria[];
+  mentoriasMentorado: Mentoria[];
+  chatListOpen: boolean;
+  selectedChat: Chat | null;
+  messages: Map<string, Message[]>;
+  unreadMessages: Map<string, number>;
+  notifications: Notification[];
+  showNotification: boolean;
+  lastNotification: Notification | null;
+  notificationTimeout: number | null;
+  lastNotificationId: string | null;
+  isLoadingMentorias: boolean;
+  isLoadingMessages: boolean;
+  isSendingMessage: boolean;
+  notificationsEnabled: boolean;
+  soundEnabled: boolean;
+  currentUserId: string | null;
+}
+
 export const useChatStore = defineStore("chat", {
-  state: () => ({
+  state: (): ChatState => ({
     // Cliente de chat
     chatClient: null,
     isConnected: false,
@@ -48,12 +117,15 @@ export const useChatStore = defineStore("chat", {
 
   getters: {
     // Todas as mentorias combinadas em formato de chat
-    allChats(state) {
-      const chats = [];
+    allChats(state): Chat[] {
+      const chats: Chat[] = [];
 
       // Mentorias onde sou mentor
       state.mentoriasMentor.forEach((mentoria) => {
         if (mentoria.isChatEnable) {
+          const mentorMessages = state.messages.get(`mentor_${mentoria.id}`) || [];
+          const lastMessage = mentorMessages[mentorMessages.length - 1];
+          
           chats.push({
             ...mentoria,
             id: `mentor_${mentoria.id}`,
@@ -66,15 +138,10 @@ export const useChatStore = defineStore("chat", {
             avatar:
               mentoria.participants?.[0]?.userAvatar || "/placeholder-user.jpg",
             otherUserName: mentoria.participants?.[0]?.userName || "Mentorado",
-            lastMessage:
-              state.messages.get(`mentor_${mentoria.id}`)?.[
-                state.messages.get(`mentor_${mentoria.id}`)?.length - 1
-              ]?.message || "",
-            lastMessageTime:
-              state.messages.get(`mentor_${mentoria.id}`)?.[
-                state.messages.get(`mentor_${mentoria.id}`)?.length - 1
-              ]?.timestamp || null,
+            lastMessage: lastMessage?.message || "",
+            lastMessageTime: lastMessage?.timestamp || null,
             unreadCount: state.unreadMessages.get(`mentor_${mentoria.id}`) || 0,
+            tutoringDate: mentoria.tutoringDate,
           });
         }
       });
@@ -82,41 +149,38 @@ export const useChatStore = defineStore("chat", {
       // Mentorias onde sou mentorado
       state.mentoriasMentorado.forEach((mentoria) => {
         if (mentoria.isChatEnable) {
+          const mentoradoMessages = state.messages.get(`mentorado_${mentoria.id}`) || [];
+          const lastMessage = mentoradoMessages[mentoradoMessages.length - 1];
+          
           chats.push({
             ...mentoria,
             id: `mentorado_${mentoria.id}`,
             originalId: mentoria.id,
             role: "mentorado",
             title: mentoria.disciplineName,
-            subtitle: `Mentor: ${mentoria.mentorName}`,
+            subtitle: `Mentor: ${mentoria.mentorName || 'Mentor'}`,
             avatar: mentoria.mentorAvatar || "/placeholder-user.jpg",
-            otherUserName: mentoria.mentorName,
-            lastMessage:
-              state.messages.get(`mentorado_${mentoria.id}`)?.[
-                state.messages.get(`mentorado_${mentoria.id}`)?.length - 1
-              ]?.message || "",
-            lastMessageTime:
-              state.messages.get(`mentorado_${mentoria.id}`)?.[
-                state.messages.get(`mentorado_${mentoria.id}`)?.length - 1
-              ]?.timestamp || null,
-            unreadCount:
-              state.unreadMessages.get(`mentorado_${mentoria.id}`) || 0,
+            otherUserName: mentoria.mentorName || "Mentor",
+            lastMessage: lastMessage?.message || "",
+            lastMessageTime: lastMessage?.timestamp || null,
+            unreadCount: state.unreadMessages.get(`mentorado_${mentoria.id}`) || 0,
+            tutoringDate: mentoria.tutoringDate,
           });
         }
       });
 
       return chats.sort((a, b) => {
-        const timeA = new Date(a.lastMessageTime || a.tutoringDate);
-        const timeB = new Date(b.lastMessageTime || b.tutoringDate);
+        const timeA = new Date(a.lastMessageTime || a.tutoringDate || '').getTime();
+        const timeB = new Date(b.lastMessageTime || b.tutoringDate || '').getTime();
         return timeB - timeA;
       });
     },
 
-    hasActiveChats(state) {
+    hasActiveChats(): boolean {
       return this.allChats.length > 0;
     },
 
-    totalUnreadCount(state) {
+    totalUnreadCount(state): string | number {
       let total = 0;
       state.unreadMessages.forEach((count) => {
         total += count;
@@ -124,7 +188,7 @@ export const useChatStore = defineStore("chat", {
       return total > 99 ? "99+" : total;
     },
 
-    selectedChatMessages(state) {
+    selectedChatMessages(state): Message[] {
       if (!state.selectedChat) return [];
       return state.messages.get(state.selectedChat.id) || [];
     },
@@ -132,7 +196,7 @@ export const useChatStore = defineStore("chat", {
 
   actions: {
     // Inicializar o sistema de chat
-    async initialize(userId) {
+    async initialize(userId: string | null): Promise<boolean> {
       this.currentUserId = userId || localStorage.getItem("userId");
 
       if (!this.currentUserId) {
@@ -155,13 +219,13 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Carregar mentorias do usuário
-    async loadMentorias() {
+    async loadMentorias(): Promise<void> {
       this.isLoadingMentorias = true;
 
       try {
         const [mentorResponse, mentoradoResponse] = await Promise.all([
-          getUserMentoringSessions(this.currentUserId),
-          getUserParticipationSessions(this.currentUserId),
+          getUserMentoringSessions(this.currentUserId as string),
+          getUserParticipationSessions(this.currentUserId as string),
         ]);
 
         this.mentoriasMentor = mentorResponse.data || [];
@@ -175,7 +239,7 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Conectar ao servidor de chat
-    async connectChat() {
+    async connectChat(): Promise<void> {
       if (this.isConnected) return;
 
       try {
@@ -196,13 +260,13 @@ export const useChatStore = defineStore("chat", {
           this.isConnected = false;
         });
 
-        this.chatClient.onError((error) => {
+        this.chatClient.onError((error: Error) => {
           console.error("Erro no chat:", error);
           this.isConnected = false;
         });
 
         // Handler global de mensagens
-        this.chatClient.onMessage("general", (message) => {
+        this.chatClient.onMessage("general", (message: any) => {
           this.handleIncomingMessage(message);
         });
 
@@ -215,12 +279,12 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Inscrever em todas as mentorias
-    subscribeToAllMentorias() {
+    subscribeToAllMentorias(): void {
       if (!this.chatClient || !this.isConnected) return;
 
       // Inscrever em mentorias como mentor
       this.mentoriasMentor.forEach((mentoria) => {
-        if (mentoria.isChatEnable) {
+        if (mentoria.isChatEnable && this.chatClient) {
           this.chatClient.subscribeTutoring(mentoria.id, {
             subscribeGeneral: true,
           });
@@ -229,7 +293,7 @@ export const useChatStore = defineStore("chat", {
 
       // Inscrever em mentorias como mentorado
       this.mentoriasMentorado.forEach((mentoria) => {
-        if (mentoria.isChatEnable) {
+        if (mentoria.isChatEnable && this.chatClient) {
           this.chatClient.subscribeTutoring(mentoria.id, {
             subscribeGeneral: true,
           });
@@ -238,9 +302,9 @@ export const useChatStore = defineStore("chat", {
     },
 
     // CORREÇÃO: Processar mensagem recebida
-    handleIncomingMessage(message) {
+    handleIncomingMessage(message: any): void {
       // Encontrar o chat correspondente
-      let chatId = null;
+      let chatId: string | null = null;
 
       // Verificar se é de uma mentoria onde sou mentor
       const mentorMentoria = this.mentoriasMentor.find(
@@ -267,18 +331,23 @@ export const useChatStore = defineStore("chat", {
 
       const messages = this.messages.get(chatId);
 
+      // Verificação de segurança para garantir que 'messages' não seja undefined
+      if (!messages) {
+        return;
+      }
+
       // Verificar duplicatas com critério mais restrito
       const isDuplicate = messages.some(
         (m) =>
           m.id === message.id ||
           (m.message === message.message &&
             String(m.senderId) === String(message.senderId) &&
-            Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) <
+            Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) <
               1000) // Reduzido para 1s
       );
 
       if (!isDuplicate) {
-        const newMessage = {
+        const newMessage: Message = {
           ...message,
           id:
             message.id ||
@@ -314,27 +383,27 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Carregar histórico de mensagens
-    async loadChatHistory(chatId, tutoringId) {
+    async loadChatHistory(chatId: string, tutoringId: string | number): Promise<void> {
       this.isLoadingMessages = true;
 
       try {
         const response = await getChatHistoryByTutoringId(tutoringId);
 
         if (response && response.data) {
-          const messages = response.data.map((msg) => ({
+          const messages: Message[] = response.data.map((msg: any) => ({
             id:
               msg.id ||
               `hist_${msg.timestamp}_${Math.random()
                 .toString(36)
                 .substr(2, 9)}`,
-            message: msg.message || msg.content,
+            message: msg.message || msg.content || '',
             senderId: msg.senderId,
             senderName:
               msg.senderName ||
               (String(msg.senderId) === String(this.currentUserId)
                 ? "Você"
-                : msg.senderName),
-            timestamp: msg.timestamp || msg.createdAt,
+                : msg.senderName || ''),
+            timestamp: msg.timestamp || msg.createdAt || new Date().toISOString(),
             tutoringId: msg.tutoringId || tutoringId,
             status:
               String(msg.senderId) === String(this.currentUserId)
@@ -344,7 +413,7 @@ export const useChatStore = defineStore("chat", {
 
           // Ordenar por timestamp
           messages.sort(
-            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
           );
 
           // Armazenar no mapa
@@ -362,8 +431,8 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Enviar mensagem
-    async sendMessage(message, chatId, tutoringId) {
-      if (!this.isConnected || !message.trim()) return false;
+    async sendMessage(message: string, chatId: string, tutoringId: string | number): Promise<boolean> {
+      if (!this.isConnected || !message.trim() || !this.chatClient) return false;
 
       this.isSendingMessage = true;
       const tempId = `temp_${Date.now()}_${Math.random()
@@ -371,21 +440,25 @@ export const useChatStore = defineStore("chat", {
         .substr(2, 9)}`;
 
       // Adicionar mensagem temporária
-      const tempMessage = {
+      const tempMessage: Message = {
         id: tempId,
         message: message.trim(),
-        senderId: this.currentUserId,
+        senderId: this.currentUserId as string,
         senderName: "Você",
         timestamp: new Date().toISOString(),
         status: "sending",
         isTemp: true,
+        tutoringId,
       };
 
       if (!this.messages.has(chatId)) {
         this.messages.set(chatId, []);
       }
 
-      this.messages.get(chatId).push(tempMessage);
+      const messages = this.messages.get(chatId);
+      if (!messages) return false;
+
+      messages.push(tempMessage);
 
       try {
         const success = this.chatClient.sendGeneralMessage(
@@ -398,7 +471,6 @@ export const useChatStore = defineStore("chat", {
         }
 
         // Atualizar status da mensagem temporária
-        const messages = this.messages.get(chatId);
         const msgIndex = messages.findIndex((m) => m.id === tempId);
         if (msgIndex !== -1) {
           messages[msgIndex].status = "sent";
@@ -410,7 +482,6 @@ export const useChatStore = defineStore("chat", {
         console.error("Erro ao enviar mensagem:", error);
 
         // Marcar como falha
-        const messages = this.messages.get(chatId);
         const msgIndex = messages.findIndex((m) => m.id === tempId);
         if (msgIndex !== -1) {
           messages[msgIndex].status = "failed";
@@ -423,7 +494,7 @@ export const useChatStore = defineStore("chat", {
     },
 
     // CORREÇÃO: Selecionar um chat
-    async selectChat(chat) {
+    async selectChat(chat: Chat): Promise<void> {
       const previousChat = this.selectedChat;
       this.selectedChat = chat;
 
@@ -438,14 +509,14 @@ export const useChatStore = defineStore("chat", {
       // Carregar histórico se não tiver mensagens
       if (
         !this.messages.has(chat.id) ||
-        this.messages.get(chat.id).length === 0
+        this.messages.get(chat.id)?.length === 0
       ) {
         await this.loadChatHistory(chat.id, chat.originalId);
       }
     },
 
     // CORREÇÃO: Mostrar notificação com controle de duplicatas
-    showMessageNotification(message, chatId) {
+    showMessageNotification(message: Message, chatId: string): void {
       if (!this.notificationsEnabled) return;
 
       const chat = this.allChats.find((c) => c.id === chatId);
@@ -475,7 +546,12 @@ export const useChatStore = defineStore("chat", {
       }
     },
 
-    displayNotification(message, chat, chatId, notificationKey) {
+    displayNotification(
+      message: Message,
+      chat: Chat,
+      chatId: string,
+      notificationKey: string
+    ): void {
       this.lastNotification = {
         id: message.id,
         chatId: chatId,
@@ -497,14 +573,14 @@ export const useChatStore = defineStore("chat", {
       }
 
       // Auto-hide após 4 segundos
-      this.notificationTimeout = setTimeout(() => {
+      this.notificationTimeout = window.setTimeout(() => {
         this.showNotification = false;
         this.lastNotificationId = null;
       }, 4000);
     },
 
     // Tocar som de notificação
-    playNotificationSound() {
+    playNotificationSound(): void {
       try {
         const audio = new Audio("/notification-sound.mp3");
         audio.volume = 0.3;
@@ -514,14 +590,14 @@ export const useChatStore = defineStore("chat", {
       }
     },
 
-    showSnackbarNotification(message, type = "info") {
+    showSnackbarNotification(message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info'): void {
       // Mapear tipos para cores do snackbar
       const colorMap = {
         success: "success",
         error: "error",
         warning: "warning",
         info: "info",
-      };
+      } as const;
 
       // Timeout maior para erros
       const timeout = type === "error" ? 5000 : 3000;
@@ -537,12 +613,12 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Abrir/fechar lista de chats
-    toggleChatList() {
+    toggleChatList(): void {
       this.chatListOpen = !this.chatListOpen;
     },
 
     // Desconectar
-    disconnect() {
+    disconnect(): void {
       // Limpar timeouts
       if (this.notificationTimeout) {
         clearTimeout(this.notificationTimeout);
@@ -562,14 +638,14 @@ export const useChatStore = defineStore("chat", {
     },
 
     // Reconectar
-    async reconnect() {
+    async reconnect(): Promise<void> {
       this.disconnect();
       await new Promise((resolve) => setTimeout(resolve, 1000));
       await this.initialize(this.currentUserId);
     },
 
     // Limpar dados (para logout)
-    clearAll() {
+    clearAll(): void {
       this.disconnect();
       this.mentoriasMentor = [];
       this.mentoriasMentorado = [];

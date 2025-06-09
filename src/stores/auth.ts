@@ -36,7 +36,7 @@ export const useAuthStore = defineStore('auth', {
           this.token = response.data.token;
           this.userId = String(response.data.userId); // userId da API é número
 
-          localStorage.setItem('authToken', this.token);
+          localStorage.setItem('authToken', this.token as string);
           localStorage.setItem('userId', this.userId);
 
           console.log('[Action login] Estado do store atualizado - this.token:', this.token, 'this.userId:', this.userId);
@@ -63,7 +63,7 @@ export const useAuthStore = defineStore('auth', {
           this.token = response.data.token;
           this.userId = String(response.data.userId);
 
-          localStorage.setItem('authToken', this.token);
+          localStorage.setItem('authToken', this.token as string);
           localStorage.setItem('userId', this.userId);
 
           console.log('[Action register] Estado do store atualizado - this.token:', this.token, 'this.userId:', this.userId);

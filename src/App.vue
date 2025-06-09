@@ -4,8 +4,8 @@
 
     <ChatManager 
       v-if="isUserAuthenticated" 
-      @messageReceived="handleGlobalChatMessage"
-      @connectionChanged="handleGlobalChatConnection"
+      @connection-changed="handleGlobalChatConnection"
+      @message-received="handleGlobalChatMessage"
     />
     </v-app>
 </template>
@@ -15,6 +15,11 @@ import { defineComponent, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth'; 
 import AppSnackbar from '@/components/AppSnackbar.vue';
 import ChatManager from '@/components/chat/ChatManager.vue'; 
+
+interface ChatMessage {
+  message: string;
+  mentoria: string;
+}
 
 export default defineComponent({
   name: 'App',
@@ -26,10 +31,14 @@ export default defineComponent({
     const authStore = useAuthStore();
 
     const isUserAuthenticated = computed(() => authStore.isAuthenticated);
-    const handleGlobalChatMessage = ({ message, mentoria }: any) => {
+    const handleGlobalChatMessage = ({ message, mentoria }: ChatMessage): void => {
+      // Handle chat message
+      console.log('New chat message:', { message, mentoria });
     };
 
-    const handleGlobalChatConnection = (connected: boolean) => {
+    const handleGlobalChatConnection = (connected: boolean): void => {
+      // Handle connection status change
+      console.log('Chat connection status:', connected);
     };
 
     return {
