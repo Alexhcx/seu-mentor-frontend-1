@@ -42,25 +42,25 @@ import { useChatStore } from '@/stores/chat'; // Ensure this path is correct for
 const chatStore = useChatStore();
 
 const openAndHandleNotificationChat = async () => {
-  // This logic is similar to what's in ChatManager.vue [cite: 185, 186]
+  // This logic is similar to what's in ChatManager.vue
   // It ensures the component can directly trigger the correct actions in the store.
-  if (chatStore.lastNotification && chatStore.lastNotification.chatId) { [cite: 81]
-    const chat = chatStore.allChats.find(c => c.id === chatStore.lastNotification.chatId); [cite: 80]
+  if (chatStore.lastNotification && chatStore.lastNotification.chatId) {
+    const chat = chatStore.allChats.find(c => c.id === chatStore.lastNotification.chatId);
     if (chat) {
-      await chatStore.selectChat(chat); [cite: 76]
+      await chatStore.selectChat(chat);
       // Ensure chat list/dialog is open to show the selected chat
-      if (!chatStore.chatListOpen) { [cite: 85]
-        chatStore.toggleChatList(); [cite: 85]
+      if (!chatStore.chatListOpen) {
+        chatStore.toggleChatList();
       }
     }
   }
-  chatStore.showNotification = false; // Hide the notification after handling [cite: 82]
+  chatStore.showNotification = false; // Hide the notification after handling
 };
 
 // No watchers are needed here as v-model="chatStore.showNotification" handles visibility,
 // and the content is directly bound to chatStore.lastNotification.
 // The sound playing is handled by the store's `showMessageNotification` action,
-// which sets `showNotification` to true and calls `playNotificationSound`. [cite: 52, 82, 83]
+// which sets `showNotification` to true and calls `playNotificationSound`.
 </script>
 
 <style scoped>
