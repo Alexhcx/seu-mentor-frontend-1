@@ -49,12 +49,17 @@ class MentorChatClient {
   };
 
   constructor(config: ChatClientConfig = {}) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = '56.124.113.58'; // Em produção, será '56.124.113.58'
+    const dynamicBrokerURL = `${protocol}//${host}/seumentor-websocket/`;
+    console.log("Tentando conectar ao WebSocket em:", dynamicBrokerURL);
+
     this.config = {
-      brokerURL: config.brokerURL || 'ws://localhost:8080/buildrun-livechat-websocket',
+      brokerURL: dynamicBrokerURL, 
       reconnectDelay: config.reconnectDelay || 5000,
       heartbeatIncoming: config.heartbeatIncoming || 4000,
       heartbeatOutgoing: config.heartbeatOutgoing || 4000,
-      debug: config.debug || false,
+      debug: config.debug || true,
       headers: config.headers || {},
     };
 

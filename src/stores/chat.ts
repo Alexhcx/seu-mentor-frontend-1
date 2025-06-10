@@ -1,6 +1,6 @@
 // src/stores/chat.ts
 import { defineStore } from "pinia";
-import MentorChatClient from "@/services/chatClient";
+import MentorChatClient from "@/services/chatClient.ts";
 import {
   getUserMentoringSessions,
   getUserParticipationSessions,

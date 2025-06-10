@@ -4,7 +4,7 @@ class MentorChatClient {
   constructor(config = {}) {
     this.config = {
       brokerURL:
-        config.brokerURL || `ws://localhost:8080/buildrun-livechat-websocket`,
+        config.brokerURL || `ws://56.124.113.58/buildrun-livechat-websocket`,
       reconnectDelay: config.reconnectDelay || 5000,
       heartbeatIncoming: config.heartbeatIncoming || 4000,
       heartbeatOutgoing: config.heartbeatOutgoing || 4000,
